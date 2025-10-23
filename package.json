@@ -1,0 +1,32 @@
+{
+  "name": "sql-to-alloy-converter",
+  "version": "1.0.0",
+  "description": "Convert SQL DDL schemas to Alloy specifications",
+  "main": "dist/index.js",
+  "bin": {
+    "sql-to-alloy": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "ts-node src/cli.ts",
+    "test": "jest"
+  },
+  "keywords": [
+    "sql",
+    "alloy",
+    "converter",
+    "schema",
+    "formal-methods"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.2",
+    "ts-node": "^10.9.1"
+  }
+}
