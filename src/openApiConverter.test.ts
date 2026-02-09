@@ -462,4 +462,120 @@ describe('OpenAPIToAlloyConverter', () => {
     // manager is not in required, so it should be 'lone'
     expect(alloy).toContain('manager: lone Manager');
   });
+
+  describe('public OpenAPI Petstore spec (openapi-generator)', () => {
+    const examplesDir = path.resolve(__dirname, '..', 'examples');
+    let alloy: string;
+    let schema: ReturnType<OpenAPIParser['parse']>;
+
+    beforeAll(() => {
+      const content = fs.readFileSync(path.join(examplesDir, 'openapi_petstore.json'), 'utf-8');
+      const parser = new OpenAPIParser();
+      schema = parser.parse(content);
+      alloy = converter.convert(content);
+    });
+
+    it('should parse all 5 schemas into tables', () => {
+      expect(schema.tables).toHaveLength(5);
+      const names = schema.tables.map(t => t.name).sort();
+      expect(names).toEqual(['Category', 'Order', 'Pet', 'Tag', 'User']);
+    });
+
+    it('should generate Alloy sigs for all schemas', () => {
+      expect(alloy).toContain('sig User');
+      expect(alloy).toContain('sig Category');
+      expect(alloy).toContain('sig Pet');
+      expect(alloy).toContain('sig Tag');
+      expect(alloy).toContain('sig Order');
+    });
+
+    it('should model Pet.category as a $ref to Category (optional)', () => {
+      // category is not in Pet.required, so it should be lone
+      expect(alloy).toContain('category: lone Category');
+      const pet = schema.tables.find(t => t.name === 'Pet')!;
+      const catFk = pet.foreignKeys.find(fk => fk.columnName === 'category');
+      expect(catFk).toBeDefined();
+      expect(catFk!.referencedTable).toBe('Category');
+    });
+
+    it('should model Pet.tags as an array-$ref to Tag (optional)', () => {
+      const pet = schema.tables.find(t => t.name === 'Pet')!;
+      const tagFk = pet.foreignKeys.find(fk => fk.columnName === 'tags');
+      expect(tagFk).toBeDefined();
+      expect(tagFk!.referencedTable).toBe('Tag');
+      // tags not in required → lone
+      expect(alloy).toContain('tags: lone Tag');
+    });
+
+    it('should treat Pet.name and Pet.photoUrls as required (one multiplicity)', () => {
+      expect(alloy).toContain('name: one String');
+      expect(alloy).toContain('photoUrls: one String');
+    });
+
+    it('should model User fields as all optional (no required array)', () => {
+      const user = schema.tables.find(t => t.name === 'User')!;
+      // User has no required array → all fields nullable
+      for (const col of user.columns) {
+        if (col.name !== 'id') {
+          expect(col.nullable).toBe(true);
+        }
+      }
+    });
+
+    it('should map User.userStatus as integer type', () => {
+      const user = schema.tables.find(t => t.name === 'User')!;
+      const userStatusCol = user.columns.find(c => c.name === 'userStatus');
+      expect(userStatusCol).toBeDefined();
+      expect(userStatusCol!.type).toBe('INT');
+    });
+
+    it('should map Order fields with correct types', () => {
+      const order = schema.tables.find(t => t.name === 'Order')!;
+      const petIdCol = order.columns.find(c => c.name === 'petId')!;
+      const quantityCol = order.columns.find(c => c.name === 'quantity')!;
+      const shipDateCol = order.columns.find(c => c.name === 'shipDate')!;
+      const statusCol = order.columns.find(c => c.name === 'status')!;
+      const completeCol = order.columns.find(c => c.name === 'complete')!;
+
+      expect(petIdCol.type).toBe('BIGINT');
+      expect(quantityCol.type).toBe('INT');
+      expect(shipDateCol.type).toBe('TIMESTAMP');
+      expect(statusCol.type).toBe('VARCHAR');
+      expect(completeCol.type).toBe('BOOLEAN');
+    });
+
+    it('should generate lone multiplicity for all Order fields (no required array)', () => {
+      // Order has no required array → all non-PK fields nullable → lone
+      expect(alloy).toMatch(/petId: lone Int/);
+      expect(alloy).toMatch(/quantity: lone Int/);
+      expect(alloy).toMatch(/shipDate: lone String/);
+      expect(alloy).toMatch(/status: lone String/);
+      expect(alloy).toMatch(/complete: lone Bool/);
+    });
+
+    it('should detect id as primary key for all schemas that have it', () => {
+      for (const table of schema.tables) {
+        expect(table.primaryKeys).toContain('id');
+      }
+    });
+
+    it('should output valid Alloy module declaration', () => {
+      expect(alloy).toContain('module schema');
+    });
+
+    it('should generate a Pet NotNull fact for required fields', () => {
+      // Pet requires name and photoUrls
+      expect(alloy).toContain('fact PetNotNull');
+      expect(alloy).toContain('all t: Pet | one t.name');
+      expect(alloy).toContain('all t: Pet | one t.photoUrls');
+    });
+
+    it('should not generate NotNull facts for schemas without required fields', () => {
+      // User, Category, Tag, Order have no required array → no NotNull fact
+      expect(alloy).not.toContain('fact UserNotNull');
+      expect(alloy).not.toContain('fact CategoryNotNull');
+      expect(alloy).not.toContain('fact TagNotNull');
+      expect(alloy).not.toContain('fact OrderNotNull');
+    });
+  });
 });
